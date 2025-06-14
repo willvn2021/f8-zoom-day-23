@@ -10,6 +10,7 @@ const taskTitle = $("#taskTitle");
 const taskGrid = $("#todoList");
 const searchInput = $(".search-input");
 const tabList = $(".tab-list");
+const toastContainer = $("#toast-container");
 
 let editIndex = null;
 const todoTasks = JSON.parse(localStorage.getItem("todoTasks")) || [];
@@ -90,19 +91,40 @@ modalBtnCancel.onclick = modalClose;
 taskForm.onsubmit = function (e) {
     e.preventDefault();
 
+    const requiredInput = {
+        name: "Task Name",
+        description: "Description",
+        start_time: "Start Time",
+        end_time: "End Time",
+        due_date: "Due Date",
+    };
+
     const formData = Object.fromEntries(new FormData(taskForm));
+
+    for (const key in requiredInput) {
+        if (!formData[key] || formData[key].trim() === "") {
+            showToast(
+                `Vui lòng nhập trường dữ liệu ${requiredInput[key]}.`,
+                "error"
+            );
+            return;
+        }
+    }
+
     if (editIndex) {
         todoTasks[editIndex] = formData;
+        showToast("Task đã được cập nhật.", "success");
     } else {
         const existingName = todoTasks.some(
             (task) => task.name.toLowerCase() === formData.name.toLowerCase()
         );
         if (existingName) {
-            alert("Task name đã tồn tại. Vui lòng chọn tên khác.");
+            showToast("Task name đã tồn tại. Vui lòng chọn tên khác.", "error");
             return;
         }
         formData.isCompleted = false;
         todoTasks.unshift(formData);
+        showToast("Task đã được thêm mới thành công !.", "success");
     }
 
     saveTasks();
@@ -186,6 +208,8 @@ taskGrid.onclick = function (e) {
         if (confirm(`Are you sure you want to delete this?`)) {
             todoTasks.splice(taskIndex, 1);
 
+            showToast("Task đã được xóa thành công!", "info");
+
             saveTasks();
             renderTask();
         }
@@ -198,6 +222,12 @@ taskGrid.onclick = function (e) {
         task.isCompleted = !task.isCompleted;
 
         saveTasks();
+        showToast(
+            `Task đã được đánh dấu ${
+                task.isCompleted ? "Hoàn thành" : "Chờ thực hiện"
+            }!`,
+            "success"
+        );
         renderTask();
     }
 };
@@ -258,4 +288,32 @@ function escapeHTML(html) {
     div.textContent = html;
 
     return div.innerHTML;
+}
+
+function showToast(message, type, duration = 3000) {
+    const toast = document.createElement("div");
+    toast.classList.add("toast", type);
+
+    const messageElement = document.createElement("span");
+    messageElement.classList.add("toast-message");
+    messageElement.textContent = message;
+
+    const closeBtn = document.createElement("button");
+    closeBtn.classList.add("toast-close-btn");
+    closeBtn.innerHTML = "&times;";
+    closeBtn.onclick = () => {
+        toast.classList.remove("show");
+
+        setTimeout(() => {
+            toast.remove();
+        }, 500);
+    };
+
+    toast.appendChild(messageElement);
+    toast.appendChild(closeBtn);
+    toastContainer.appendChild(toast);
+    toast.offsetHeight; // Trigger reflow
+    toast.classList.add("show");
+
+    setTimeout(() => closeBtn.click(), duration);
 }
