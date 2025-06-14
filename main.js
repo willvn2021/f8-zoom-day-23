@@ -9,6 +9,10 @@ const taskForm = $(".todo-app-form");
 const taskTitle = $("#taskTitle");
 const taskGrid = $("#todoList");
 const searchInput = $(".search-input");
+const tabList = $(".tab-list");
+
+let editIndex = null;
+const todoTasks = JSON.parse(localStorage.getItem("todoTasks")) || [];
 
 searchInput.oninput = function (e) {
     const value = e.target.value.trim().toLowerCase();
@@ -32,9 +36,6 @@ searchInput.oninput = function (e) {
         card.hidden = !filteredTaskCards.includes(card);
     });
 };
-let editIndex = null;
-
-const todoTasks = JSON.parse(localStorage.getItem("todoTasks")) || [];
 
 function saveTasks() {
     localStorage.setItem("todoTasks", JSON.stringify(todoTasks));
@@ -102,6 +103,44 @@ taskForm.onsubmit = function (e) {
     modalReset();
     modalClose();
     renderTask();
+};
+
+tabList.onclick = function (e) {
+    const getAllTabs = tabList.querySelectorAll(".tab-button");
+    const tabItem = e.target.closest(".tab-button");
+
+    if (tabItem) {
+        //Gỡ tất cả các class active rồi thêm vào khi có onclick
+        getAllTabs.forEach((button) => button.classList.remove("active"));
+        tabItem.classList.add("active");
+
+        //Lấy Text trong HTML để đi so sánh
+        const tabTextContent = tabItem.textContent;
+
+        if (tabTextContent === "Completed") {
+            const taskCards = taskGrid.querySelectorAll(".task-card");
+            const allTaskArr = Array.from(taskCards);
+
+            //Check nếu chưa có Task nào Completed
+            const hasCompleted = todoTasks.filter((task) => task.isCompleted);
+            if (!hasCompleted.length) {
+                taskGrid.innerHTML = `<span>No Task Completed</span>`;
+                return;
+            }
+
+            //Lọc ra các Class 'completed' trong danh sách task-card sau đó đem đi phủ định để ẩn đi
+            const filteredTaskCards = allTaskArr.filter((card) => {
+                const isCompleted = card.classList.contains("completed");
+                return isCompleted;
+            });
+
+            allTaskArr.forEach((card) => {
+                card.hidden = !filteredTaskCards.includes(card);
+            });
+        }
+
+        if (tabTextContent === "Active Task") renderTask();
+    }
 };
 
 taskGrid.onclick = function (e) {
