@@ -82,7 +82,6 @@ function modalReset() {
 }
 
 taskAddBtn.onclick = modalOpen;
-
 modalBtnClose.onclick = modalClose;
 modalBtnCancel.onclick = modalClose;
 
@@ -95,6 +94,13 @@ taskForm.onsubmit = function (e) {
     if (editIndex) {
         todoTasks[editIndex] = formData;
     } else {
+        const existingName = todoTasks.some(
+            (task) => task.name.toLowerCase() === formData.name.toLowerCase()
+        );
+        if (existingName) {
+            alert("Task name đã tồn tại. Vui lòng chọn tên khác.");
+            return;
+        }
         formData.isCompleted = false;
         todoTasks.unshift(formData);
     }
@@ -129,13 +135,9 @@ tabList.onclick = function (e) {
             }
 
             //Lọc ra các Class 'completed' trong danh sách task-card sau đó đem đi phủ định để ẩn đi
-            const filteredTaskCards = allTaskArr.filter((card) => {
-                const isCompleted = card.classList.contains("completed");
-                return isCompleted;
-            });
-
             allTaskArr.forEach((card) => {
-                card.hidden = !filteredTaskCards.includes(card);
+                const isCompleted = card.classList.contains("completed");
+                if (!isCompleted) card.hidden = true;
             });
         }
 
@@ -211,11 +213,11 @@ function renderTask() {
     const taskItems = todoTasks
         .map(
             // prettier-ignore
-            (task, index) => `          
-
-            <div class="task-card ${task.color} ${task.isCompleted ? "completed" : ""}" data-index="${index}">
+            (task, index) =>
+        `
+            <div class="task-card ${escapeHTML(task.color)} ${task.isCompleted ? "completed" : ""}" data-index="${index}">
                 <div class="task-header">
-                    <h3 class="task-title">${task.name}</h3>
+                    <h3 class="task-title">${escapeHTML(task.name)}</h3>
                     <button class="task-menu">
                         <i class="fa-solid fa-ellipsis fa-icon"></i>
                         <div class="dropdown-menu">
@@ -235,9 +237,9 @@ function renderTask() {
                     </button>
                 </div>
                 <p class="task-description">
-                    ${task.description}
+                    ${escapeHTML(task.description)}
                 </p>
-                <div class="task-time">${task.start_time} - ${task.end_time}</div>
+                <div class="task-time">${escapeHTML(task.start_time)} - ${escapeHTML(task.end_time)}</div>
             </div>
 
         `
@@ -247,4 +249,13 @@ function renderTask() {
     taskGrid.innerHTML = taskItems;
 }
 
+function escapeHTML(str) {}
+
 renderTask();
+
+function escapeHTML(html) {
+    const div = document.createElement("div");
+    div.textContent = html;
+
+    return div.innerHTML;
+}
