@@ -13,7 +13,10 @@ const tabList = $(".tab-list");
 const toastContainer = $("#toast-container");
 
 let editIndex = null;
-const todoTasks = JSON.parse(localStorage.getItem("todoTasks")) || [];
+// const todoTasks = JSON.parse(localStorage.getItem("todoTasks")) || [];
+const apiURL = "http://localhost:3000/tasks";
+let editID = null;
+let todoTasks = [];
 
 searchInput.oninput = function (e) {
     const value = e.target.value.trim().toLowerCase();
@@ -38,9 +41,9 @@ searchInput.oninput = function (e) {
     });
 };
 
-function saveTasks() {
-    localStorage.setItem("todoTasks", JSON.stringify(todoTasks));
-}
+// function saveTasks() {
+//     localStorage.setItem("todoTasks", JSON.stringify(todoTasks));
+// }
 
 function modalOpen() {
     modalOverlay.className = "modal-overlay show";
@@ -75,7 +78,8 @@ function modalClose() {
     }, 300);
 
     modalReset();
-    editIndex = null;
+    // editIndex = null;
+    editID = null;
 }
 
 function modalReset() {
@@ -88,7 +92,8 @@ modalBtnCancel.onclick = modalClose;
 
 // modalOverlay.onclick = modalClose;
 
-taskForm.onsubmit = function (e) {
+// taskForm.onsubmit = function (e) {
+taskForm.onsubmit = async function (e) {
     e.preventDefault();
 
     const requiredInput = {
@@ -104,33 +109,20 @@ taskForm.onsubmit = function (e) {
     for (const key in requiredInput) {
         if (!formData[key] || formData[key].trim() === "") {
             showToast(
-                `Vui lòng nhập trường dữ liệu ${requiredInput[key]}.`,
+                `Vui lòng nhập trường dữ liệu ${escapeHTML(
+                    requiredInput[key]
+                )}.`,
                 "error"
             );
             return;
         }
     }
 
-    if (editIndex) {
-        todoTasks[editIndex] = formData;
-        showToast("Task đã được cập nhật.", "success");
+    if (editID) {
+        await updateTask(editID, formData);
     } else {
-        const existingName = todoTasks.some(
-            (task) => task.name.toLowerCase() === formData.name.toLowerCase()
-        );
-        if (existingName) {
-            showToast("Task name đã tồn tại. Vui lòng chọn tên khác.", "error");
-            return;
-        }
-        formData.isCompleted = false;
-        todoTasks.unshift(formData);
-        showToast("Task đã được thêm mới thành công !.", "success");
+        await createTask(formData);
     }
-
-    saveTasks();
-    modalReset();
-    modalClose();
-    renderTask();
 };
 
 tabList.onclick = function (e) {
@@ -173,10 +165,10 @@ taskGrid.onclick = function (e) {
     const completeBtn = e.target.closest(".complete-btn");
 
     if (editBtn) {
-        const taskIndex = +editBtn.dataset.index;
-        const task = todoTasks[taskIndex];
+        const taskId = editBtn.dataset.id;
+        const task = todoTasks.find((task) => task.id == taskId);
 
-        editIndex = taskIndex;
+        editID = taskId;
 
         for (const key in task) {
             const value = task[key];
@@ -202,33 +194,16 @@ taskGrid.onclick = function (e) {
     }
 
     if (deleteBtn) {
-        const taskIndex = +deleteBtn.dataset.index;
-        const task = todoTasks[taskIndex];
+        const taskId = deleteBtn.dataset.id;
 
         if (confirm(`Are you sure you want to delete this?`)) {
-            todoTasks.splice(taskIndex, 1);
-
-            showToast("Task đã được xóa thành công!", "info");
-
-            saveTasks();
-            renderTask();
+            deleteTask(taskId);
         }
     }
 
     if (completeBtn) {
-        const taskIndex = +completeBtn.dataset.index;
-        const task = todoTasks[taskIndex];
-
-        task.isCompleted = !task.isCompleted;
-
-        saveTasks();
-        showToast(
-            `Task đã được đánh dấu ${
-                task.isCompleted ? "Hoàn thành" : "Chờ thực hiện"
-            }!`,
-            "success"
-        );
-        renderTask();
+        const taskId = completeBtn.dataset.id;
+        toggleComplete(taskId);
     }
 };
 
@@ -243,23 +218,23 @@ function renderTask() {
     const taskItems = todoTasks
         .map(
             // prettier-ignore
-            (task, index) =>
+            (task) =>
         `
-            <div class="task-card ${escapeHTML(task.color)} ${task.isCompleted ? "completed" : ""}" data-index="${index}">
-                <div class="task-header">
+            <div class="task-card ${escapeHTML(task.color)} ${task.isCompleted ? "completed" : ""}" data-id="${task.id}">
+                <div class="task-header">   
                     <h3 class="task-title">${escapeHTML(task.name)}</h3>
                     <button class="task-menu">
                         <i class="fa-solid fa-ellipsis fa-icon"></i>
                         <div class="dropdown-menu">
-                            <div class="dropdown-item edit-btn" data-index="${index}">
+                            <div class="dropdown-item edit-btn" data-id="${task.id}">
                                 <i class="fa-solid fa-pen-to-square fa-icon"></i>
                                 Edit
                             </div>
-                            <div class="dropdown-item complete complete-btn" data-index="${index}">
+                            <div class="dropdown-item complete complete-btn" data-id="${task.id}">
                                 <i class="fa-solid fa-check fa-icon"></i>
                                 ${task.isCompleted ? "Mark as Active" : "Mark as Complete"}
                             </div>
-                            <div class="dropdown-item delete delete-btn" data-index="${index}">
+                            <div class="dropdown-item delete delete-btn" data-id="${task.id}">
                                 <i class="fa-solid fa-trash fa-icon"></i>
                                 Delete
                             </div>
@@ -279,9 +254,116 @@ function renderTask() {
     taskGrid.innerHTML = taskItems;
 }
 
-function escapeHTML(str) {}
+async function getTasks() {
+    try {
+        const res = await fetch(apiURL + "?_sort=id&_order=desc");
+        const tasks = await res.json();
+        todoTasks = tasks;
+        renderTask();
+    } catch (error) {
+        console.error("Error fetching tasks:", error);
+        showToast("Could not fetch tasks from the server.", "error");
+    }
+}
 
-renderTask();
+async function createTask(data) {
+    try {
+        const existingName = todoTasks.some(
+            (task) => task.name.toLowerCase() === data.name.toLowerCase()
+        );
+        if (existingName) {
+            showToast("Task name đã tồn tại. Vui lòng chọn tên khác.", "error");
+            return;
+        }
+        data.isCompleted = false;
+        const res = await fetch(apiURL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+        });
+
+        const newTask = await res.json();
+
+        todoTasks.unshift(newTask);
+        renderTask();
+        modalClose();
+        showToast("Task đã được thêm mới thành công!", "success");
+    } catch (error) {
+        console.error("Error creating task:", error);
+        showToast("Could not create task.", "error");
+    }
+}
+
+async function updateTask(id, data) {
+    try {
+        const res = await fetch(`${apiURL}/${id}`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+        });
+        const updateTask = await res.json();
+
+        const index = todoTasks.findIndex((task) => task.id === id);
+        if (index !== -1) todoTasks[index] = updateTask;
+        renderTask();
+        modalClose();
+        showToast("Task đã được cập nhật thành công!", "success");
+    } catch (error) {
+        console.error("Error updating task:", error);
+        showToast("Could not update task.", "error");
+    }
+}
+
+async function deleteTask(id) {
+    try {
+        await fetch(`${apiURL}/${id}`, { method: "DELETE" });
+        const index = todoTasks.findIndex((task) => task.id === id);
+        if (index !== -1) todoTasks.splice(index, 1);
+        renderTask();
+        showToast("Task đã được xóa thành công!", "success");
+    } catch (error) {
+        console.error("Error deleting task:", error);
+        showToast("Could not delete task.", "error");
+    }
+}
+
+async function toggleComplete(id) {
+    const task = todoTasks.find((task) => task.id === id);
+    if (!task) return;
+
+    const newStatus = !task.isCompleted;
+    try {
+        const res = await fetch(`${apiURL}/${id}`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ isCompleted: newStatus }),
+        });
+        const updateTask = await res.json();
+
+        const index = todoTasks.findIndex((task) => task.id == id);
+        if (index !== -1) todoTasks[index] = updateTask;
+        renderTask();
+        showToast(
+            `Task đã được đánh dấu ${
+                updatedTask.isCompleted ? "Hoàn thành" : "Chờ thực hiện"
+            }!`,
+            "success"
+        );
+    } catch (error) {
+        console.error("Error toggling complete status:", error);
+        showToast("Could not toggle complete status.", "error");
+    }
+}
+
+function start() {
+    getTasks();
+}
 
 function escapeHTML(html) {
     const div = document.createElement("div");
@@ -317,3 +399,5 @@ function showToast(message, type, duration = 3000) {
 
     setTimeout(() => closeBtn.click(), duration);
 }
+
+start();
